@@ -9101,7 +9101,10 @@ S.view="auth";S.authBusy=true;render();
   const guard=await import("./argos-deploy-guard.mjs");
   guard.assertArgosDeployment(location.hostname,cfg);
   const mod=await import("./argos-auth.mjs");
-  AUTH=mod.createArgosAuth({projectUrl:cfg.supabaseUrl,publishableKey:cfg.publishableKey,storage:sessionStorage});
+  /* P110: login lembrado no aparelho (localStorage). A sessão de quem já estava logado nesta aba é aproveitada. */
+  const ARGOS_SESSION_KEY="argos_original_supabase_session_v1";
+  try{const old=sessionStorage.getItem(ARGOS_SESSION_KEY);if(old&&!localStorage.getItem(ARGOS_SESSION_KEY))localStorage.setItem(ARGOS_SESSION_KEY,old);sessionStorage.removeItem(ARGOS_SESSION_KEY);}catch(_){}
+  AUTH=mod.createArgosAuth({projectUrl:cfg.supabaseUrl,publishableKey:cfg.publishableKey,storage:localStorage});
   S.authReady=true;
   const link=AUTH.readLink(location.hash);
   if(link){
@@ -9111,19 +9114,32 @@ S.view="auth";S.authBusy=true;render();
    catch(e){AUTH.clear();S.authBusy=false;S.authMode="";S.loginError='Esse link expirou ou já foi usado. Toque em "Esqueci minha senha" para receber outro.';render();}
    return;
   }
-  const identity=await AUTH.restore();
-  if(identity)await argosEnterIdentity(identity);
-  else{S.authBusy=false;S.loginError="";render();}
+  await argosRestoreRemembered();
  }catch(e){AUTH=null;S.authReady=false;S.authBusy=false;S.loginError="Ambiente não configurado ou autenticação indisponível. Acesse o QA configurado.";render();}
 })();
+/* P110: abre com o login lembrado; sem internet, não apaga o login e entra sozinho quando a conexão voltar. */
+async function argosRestoreRemembered(){
+ let identity=null;
+ try{identity=await AUTH.restore();}
+ catch(e){
+  if(e&&e.network){
+   S.authBusy=false;S.loginError="Sem internet agora. O ARGOS entra sozinho quando a conexão voltar.";render();
+   const retry=()=>{window.removeEventListener("online",retry);if(ACTIVE_ACCOUNT||!AUTH)return;S.authBusy=true;render();argosRestoreRemembered();};
+   window.addEventListener("online",retry);return;
+  }
+  throw e;
+ }
+ if(identity)await argosEnterIdentity(identity);
+ else{S.authBusy=false;S.loginError="";render();}
+}
 try{splash();}catch(e){}
-/* Bloquear visualização ao expirar ou revogar o token. Sem rede, bloquear por precaução. */
+/* Bloquear visualização ao expirar ou revogar o token. P110: falha de rede não derruba o login lembrado (tenta de novo no próximo ciclo). */
 let authChecking=false;
 async function argosRevalidate(){
  if(!ACTIVE_ACCOUNT||!AUTH||authChecking||S.importBusy||S.photoSaving||S.photoDeleting)return;
  authChecking=true;
  try{const i=await AUTH.verify();if(i.uid!==ACTIVE_ACCOUNT||i.role!==ACTIVE_ROLE)throw Error("Identidade alterada");}
- catch(e){try{sessionStorage.setItem('argos_auth_last_clear',JSON.stringify({at:new Date().toISOString(),stage:'revalidate',status:Number.isInteger(e&&e.status)?e.status:null,reason:String(e&&e.message||e||'').slice(0,160)}));}catch(_){}argosLockSession("Sessão expirada ou sem autorização. Entre novamente.");try{await AUTH.signOut();}catch(_){}}
+ catch(e){if(e&&e.network)return;try{sessionStorage.setItem('argos_auth_last_clear',JSON.stringify({at:new Date().toISOString(),stage:'revalidate',status:Number.isInteger(e&&e.status)?e.status:null,reason:String(e&&e.message||e||'').slice(0,160)}));}catch(_){}argosLockSession("Sessão expirada ou sem autorização. Entre novamente.");try{await AUTH.signOut();}catch(_){}}
  finally{authChecking=false;}
 }
 window.addEventListener('beforeunload',event=>{if(CLOUD_DIRTY||CLOUD_PENDING||CLOUD_FAULT){event.preventDefault();event.returnValue='';}});

@@ -15,7 +15,7 @@ export function createArgosAuth({projectUrl,publishableKey,storage,transport=fet
     storage.setItem(SESSION_KEY,JSON.stringify(session));return session;
   }
   async function request(path,{method='GET',body,authenticated=false,token}={}){
-    let res;try{res=await transport(projectUrl+path,{method,cache:'no-store',mode:'cors',headers:{apikey:publishableKey,'Content-Type':'application/json',...(authenticated?{Authorization:'Bearer '+(token||session?.access_token)}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});}catch(e){const err=Error('Falha de rede ao falar com a autenticação');err.cause=e;throw err;}
+    let res;try{res=await transport(projectUrl+path,{method,cache:'no-store',mode:'cors',headers:{apikey:publishableKey,'Content-Type':'application/json',...(authenticated?{Authorization:'Bearer '+(token||session?.access_token)}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});}catch(e){const err=Error('Falha de rede ao falar com a autenticação');err.cause=e;err.network=true;throw err;}
     let data=null;try{data=await res.json();}catch{}
     if(!res.ok){
       const fail=m=>Object.assign(Error(m),{status:res.status});
@@ -27,7 +27,11 @@ export function createArgosAuth({projectUrl,publishableKey,storage,transport=fet
   }
   async function refresh(){
     if(!session?.refresh_token)throw Error('Sem refresh token');
-    if(!refreshInFlight)refreshInFlight=(async()=>save(await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:session.refresh_token}})))().catch(e=>{clear();note('refresh',e);throw e;}).finally(()=>{refreshInFlight=null;});
+    /* P110: login lembrado no aparelho. Se outra aba/janela do app já renovou a sessão, usa a renovada
+       (o refresh token antigo deixa de valer e reutilizá-lo derrubaria o login). */
+    try{const st=JSON.parse(storage.getItem(SESSION_KEY)||'null');if(st?.refresh_token&&st.access_token&&st.user?.id===session.user.id&&st.refresh_token!==session.refresh_token){session=st;if(Number(st.expires_at)>Date.now()/1000+60)return session;}}catch{}
+    /* Falha de rede não apaga o login lembrado: tenta de novo quando a conexão voltar. */
+    if(!refreshInFlight)refreshInFlight=(async()=>save(await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:session.refresh_token}})))().catch(e=>{if(!e?.network)clear();note('refresh',e);throw e;}).finally(()=>{refreshInFlight=null;});
     return refreshInFlight;
   }
   async function ensureFresh(){if(!session?.access_token)throw Error('Entre novamente');if(Number(session.expires_at)<=Date.now()/1000+60)await refresh();return session;}
@@ -48,7 +52,7 @@ export function createArgosAuth({projectUrl,publishableKey,storage,transport=fet
   }
   async function restore(){
     try{const prior=JSON.parse(storage.getItem(SESSION_KEY)||'null');if(!prior?.refresh_token||!prior?.access_token||!UUID.test(prior?.user?.id)){clear();return null;}session=prior;return await verify();}
-    catch(e){clear();note('restore',e);return null;}
+    catch(e){if(e?.network){note('restore',e);throw e;}clear();note('restore',e);return null;}
   }
   async function signOut(){const token=session?.access_token;clear();if(token)try{await request('/auth/v1/logout',{method:'POST',authenticated:true,token});}catch{}}
   /* P109: o profissional cria a própria senha pelo link do convite (ou de recuperação) que o Supabase envia ao e-mail.
