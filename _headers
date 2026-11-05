@@ -1,0 +1,36 @@
+/sw.js
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/
+  Cache-Control: no-cache
+
+/argos-public-config.json
+  Cache-Control: no-store, max-age=0
+
+/argos-auth.mjs
+  Cache-Control: no-cache
+
+/argos-legacy-rescue.mjs
+  Cache-Control: no-cache
+
+/argos-admin.mjs
+  Cache-Control: no-cache
+
+/argos-cloud.mjs
+  Cache-Control: no-cache
+
+/argos-deploy-guard.mjs
+  Cache-Control: no-cache
+
+/argos-history-csv.mjs
+  Cache-Control: no-cache
+
+/argos-legacy.mjs
+  Cache-Control: no-cache
+
+/argos-photo-cloud.mjs
+  Cache-Control: no-cache
+
+/argos-tabs.mjs
+  Cache-Control: no-cache
