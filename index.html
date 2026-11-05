@@ -4692,7 +4692,14 @@ function lastIso(id){let best="";keys().forEach(k=>{if(k.indexOf("hist_"+id+"_")
 function argosLoginHTML(){
  const error=S.loginError||"";
  if(S.authBusy)return `<div class="argos-login"><div class="argos-login-panel"><div class="argos-login-brand">${WM}</div><p class="mut" role="status" aria-live="polite" style="text-align:center;font-size:13px">Abrindo o ARGOS…</p></div></div>`;
- return `<div class="argos-login"><div class="argos-login-panel"><div class="argos-login-brand">${WM}</div><form data-f="argosLogin" class="argos-login-form" autocomplete="on"><label class="in"><span>E-mail profissional</span><input name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" required placeholder="email@exemplo.com" maxlength="254" ${S.authBusy?'disabled':''}></label><label class="in"><span>Senha</span><input name="password" type="password" autocomplete="current-password" required placeholder="Senha" ${S.authBusy?'disabled':''}></label><div class="argos-login-error" role="alert">${esc(error)}</div><button class="argos-login-submit" type="submit" ${(!S.authReady||S.authBusy)?'disabled aria-disabled="true"':''}>${S.authBusy?'Conferindo acesso…':'Entrar'}</button><p class="mut" style="font-size:11px">Acesso restrito a profissionais cadastrados.</p></form></div></div>`;
+ return `<div class="argos-login"><div class="argos-login-panel"><div class="argos-login-brand">${WM}</div><form data-f="argosLogin" class="argos-login-form" autocomplete="on"><label class="in"><span>E-mail profissional</span><input name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" required placeholder="email@exemplo.com" maxlength="254" ${S.authBusy?'disabled':''}></label><label class="in"><span>Senha</span><input name="password" type="password" autocomplete="current-password" required placeholder="Senha" ${S.authBusy?'disabled':''}></label><div class="argos-login-error" role="alert">${esc(error)}</div><button class="argos-login-submit" type="submit" ${(!S.authReady||S.authBusy)?'disabled aria-disabled="true"':''}>${S.authBusy?'Conferindo acesso…':'Entrar'}</button><button class="link" type="button" data-auth="forgot" style="font-size:12px;min-height:44px">Esqueci minha senha</button><p class="mut" style="font-size:11px">Acesso restrito a profissionais cadastrados. Primeiro acesso: abra o convite que chegou no seu e-mail.</p></form></div></div>`;
+}
+/* P109: criar senha (link do convite ou de recuperação) e pedir link novo. */
+function argosLoginModeHTML(){
+ const error=S.loginError||"",busy=S.authBusy;
+ if(S.authMode==="setpw")return `<div class="argos-login"><div class="argos-login-panel"><div class="argos-login-brand">${WM}</div><form data-f="argosSetPw" class="argos-login-form" autocomplete="on"><p style="font-size:15px;margin:0"><b>${S.authLinkType==="recovery"?"Crie uma senha nova":"Crie sua senha"}</b></p><p class="mut" style="font-size:12px;margin:0;overflow-wrap:anywhere">${esc(S.authLinkEmail||"")}</p><input type="email" name="username" autocomplete="username" value="${esc(S.authLinkEmail||"")}" hidden><label class="in"><span>Senha nova</span><input name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="Mínimo 8, com letras e números" ${busy?'disabled':''}></label><label class="in"><span>Repita a senha</span><input name="password2" type="password" autocomplete="new-password" required minlength="8" placeholder="Repita a senha" ${busy?'disabled':''}></label><div class="argos-login-error" role="alert">${esc(error)}</div><button class="argos-login-submit" type="submit" ${busy?'disabled aria-disabled="true"':''}>${busy?'Salvando…':'Salvar senha e entrar'}</button><p class="mut" style="font-size:11px">Só você conhece essa senha: ela vai direto para o servidor de login e não fica guardada no aparelho.</p></form></div></div>`;
+ if(S.authMode==="forgot")return `<div class="argos-login"><div class="argos-login-panel"><div class="argos-login-brand">${WM}</div><form data-f="argosForgot" class="argos-login-form" autocomplete="on"><p style="font-size:15px;margin:0"><b>Receber link para criar senha</b></p>${S.authForgotSent?`<p class="mut" role="status" style="font-size:13px">Se esse e-mail tiver acesso ao ARGOS, o link chega em alguns minutos. Confira também o spam. Abra o link neste aparelho.</p>`:`<label class="in"><span>E-mail profissional</span><input name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" required placeholder="email@exemplo.com" maxlength="254" ${busy?'disabled':''}></label><div class="argos-login-error" role="alert">${esc(error)}</div><button class="argos-login-submit" type="submit" ${(!S.authReady||busy)?'disabled aria-disabled="true"':''}>${busy?'Enviando…':'Enviar link'}</button>`}<button class="link" type="button" data-auth="back" style="font-size:12px;min-height:44px">Voltar para entrar</button></form></div></div>`;
+ return "";
 }
 /* P16: tudo que decide privilégios corre dentro de RPC SECURITY DEFINER.
    O navegador apenas solicita uma operação já autorizada no servidor. */
@@ -8523,7 +8530,7 @@ function render(top){
   if(S.tab==="home")S.tab="treino";
   const app=document.getElementById("app"), alunoFocus=argosAlunoFocusCapture(document.getElementById("app"));
   let html="";
-  if(S.view==="auth"){html=argosLoginHTML();}
+  if(S.view==="auth"){html=(!S.authBusy&&argosLoginModeHTML())||argosLoginHTML();}
   else if(S.view==="gate"){html=vGate();}
   else{
     if(!S.sub&&S.tab==="treino"&&focusOn()){html=vFocus();S._fx=1;}
@@ -8953,6 +8960,27 @@ function argosLockSession(message){
  S.view="auth";S.tab="treino";S.authBusy=false;S.authReady=!!AUTH;S.loginError=message||"Entre para continuar.";
  render(true);
 }
+document.addEventListener("click",ev=>{const b=ev.target.closest("[data-auth]");if(!b||S.view!=="auth"||S.authBusy)return;ev.preventDefault();
+ if(b.dataset.auth==="forgot"){S.authMode="forgot";S.authForgotSent=false;S.loginError="";render();}
+ else if(b.dataset.auth==="back"){S.authMode="";S.authForgotSent=false;S.loginError="";render();}},true);
+document.addEventListener("submit",async ev=>{
+ const f=ev.target;if(!f.matches('form[data-f="argosForgot"],form[data-f="argosSetPw"]'))return;
+ ev.preventDefault();ev.stopImmediatePropagation();
+ if(!AUTH||S.authBusy)return;
+ const fd=new FormData(f);
+ if(f.dataset.f==="argosForgot"){
+  const email=String(fd.get("email")||"").trim();S.authBusy=true;S.loginError="";render();
+  try{await AUTH.recover(email,location.origin+location.pathname);S.authForgotSent=true;}catch(e){S.loginError=String(e.message||"Não foi possível pedir o link");}
+  S.authBusy=false;render();return;
+ }
+ const p1=String(fd.get("password")||""),p2=String(fd.get("password2")||"");
+ if(p1!==p2){S.loginError="As duas senhas não são iguais.";render();return;}
+ S.authBusy=true;S.loginError="";render();
+ try{await AUTH.setPassword(p1);}catch(e){S.authBusy=false;S.loginError=String(e.message||"Não foi possível salvar a senha");render();return;}
+ S.authMode="";
+ try{const identity=await AUTH.verify();await argosEnterIdentity(identity);}
+ catch(e){try{await AUTH.signOut();}catch(_){}argosLockSession(/papel/.test(String(e.message))?"Senha criada. Seu acesso ainda não foi liberado pelo administrador do ARGOS; entre de novo depois da liberação.":"Senha criada. Entre com seu e-mail e a senha nova.");}
+},true);
 document.addEventListener("submit",async ev=>{
  const f=ev.target;if(!f.matches('form[data-f="argosLogin"]'))return;
  ev.preventDefault();ev.stopImmediatePropagation();
@@ -9075,6 +9103,14 @@ S.view="auth";S.authBusy=true;render();
   const mod=await import("./argos-auth.mjs");
   AUTH=mod.createArgosAuth({projectUrl:cfg.supabaseUrl,publishableKey:cfg.publishableKey,storage:sessionStorage});
   S.authReady=true;
+  const link=AUTH.readLink(location.hash);
+  if(link){
+   try{history.replaceState(null,"",location.pathname+location.search);}catch(_){}
+   if(link.error){S.authBusy=false;S.authMode="";S.loginError=link.error;render();return;}
+   try{const who=await AUTH.adoptLink(link);S.authMode="setpw";S.authLinkType=link.type;S.authLinkEmail=who.email;S.authBusy=false;S.loginError="";render();}
+   catch(e){AUTH.clear();S.authBusy=false;S.authMode="";S.loginError='Esse link expirou ou já foi usado. Toque em "Esqueci minha senha" para receber outro.';render();}
+   return;
+  }
   const identity=await AUTH.restore();
   if(identity)await argosEnterIdentity(identity);
   else{S.authBusy=false;S.loginError="";render();}

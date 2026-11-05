@@ -51,5 +51,43 @@ export function createArgosAuth({projectUrl,publishableKey,storage,transport=fet
     catch(e){clear();note('restore',e);return null;}
   }
   async function signOut(){const token=session?.access_token;clear();if(token)try{await request('/auth/v1/logout',{method:'POST',authenticated:true,token});}catch{}}
-  return {signIn,restore,verify,signOut,clear,getAccessToken:async()=>{await ensureFresh();return session.access_token;}};
+  /* P109: o profissional cria a própria senha pelo link do convite (ou de recuperação) que o Supabase envia ao e-mail.
+     Ninguém digita, envia ou vê a senha de outra pessoa. O link traz um token de uso único no fragmento (#), que não vai ao servidor do site. */
+  function readLink(hash){
+    const h=String(hash||'').replace(/^#/,'');if(!h)return null;
+    const p=new URLSearchParams(h);
+    if(p.get('error')||p.get('error_code')){const code=p.get('error_code')||p.get('error');return {error:code==='otp_expired'?'Esse link expirou ou já foi usado. Toque em "Esqueci minha senha" para receber outro.':'Não foi possível validar o link do e-mail. Toque em "Esqueci minha senha" para receber outro.'};}
+    const type=p.get('type');if(!['invite','recovery','signup','magiclink'].includes(type)||!p.get('access_token')||!p.get('refresh_token'))return null;
+    return {type,access_token:p.get('access_token'),refresh_token:p.get('refresh_token'),expires_in:Number(p.get('expires_in'))||3600};
+  }
+  async function adoptLink(link){
+    if(!link?.access_token||!link?.refresh_token)throw Error('Link inválido');
+    clear();
+    const user=await request('/auth/v1/user',{authenticated:true,token:link.access_token});
+    if(!UUID.test(user?.id))throw Error('Link inválido');
+    save({access_token:link.access_token,refresh_token:link.refresh_token,expires_in:link.expires_in,user});
+    return {uid:user.id,email:user.email||''};
+  }
+  async function setPassword(password){
+    const pw=String(password||'');
+    if(pw.length<8||!/[A-Za-z]/.test(pw)||!/\d/.test(pw))throw Error('Use pelo menos 8 caracteres, com letras e números');
+    await ensureFresh();
+    let res;try{res=await transport(projectUrl+'/auth/v1/user',{method:'PUT',cache:'no-store',mode:'cors',headers:{apikey:publishableKey,'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({password:pw})});}catch(e){throw Error('Falha de rede ao salvar a senha');}
+    if(res.ok)return true;
+    let data=null;try{data=await res.json();}catch{}
+    const msg=String(data?.msg||data?.message||data?.error_description||'');
+    if(res.status===422&&/different/i.test(msg))throw Error('A nova senha precisa ser diferente da anterior');
+    if(res.status===422||/weak|password/i.test(msg))throw Error('Senha fraca: use uma senha mais longa, misturando letras, números e símbolos');
+    if(res.status===401||res.status===403)throw Error('O link expirou. Toque em "Esqueci minha senha" para receber outro');
+    throw Error('Não foi possível salvar a senha ('+res.status+')');
+  }
+  async function recover(email,redirectTo){
+    const e=String(email||'').trim();if(!e.includes('@'))throw Error('Informe o e-mail cadastrado');
+    if(!/^(https:\/\/[^\s]+|http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/[^\s]*)$/.test(String(redirectTo||'')))throw Error('Endereço de retorno inválido');
+    let res;try{res=await transport(projectUrl+'/auth/v1/recover?redirect_to='+encodeURIComponent(redirectTo),{method:'POST',cache:'no-store',mode:'cors',headers:{apikey:publishableKey,'Content-Type':'application/json'},body:JSON.stringify({email:e})});}catch(err){throw Error('Falha de rede ao pedir o link');}
+    if(res.status===429)throw Error('Muitos pedidos seguidos. Aguarde alguns minutos e tente de novo');
+    // Mesma resposta para e-mail cadastrado ou não: não revela quem tem conta.
+    return true;
+  }
+  return {signIn,restore,verify,signOut,clear,readLink,adoptLink,setPassword,recover,getAccessToken:async()=>{await ensureFresh();return session.access_token;}};
 }

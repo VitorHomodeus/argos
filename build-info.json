@@ -2,9 +2,9 @@
   "product": "ARGOS original evoluído",
   "release": "PRODUCTION_BUILD_NOT_RELEASE_APPROVAL",
   "deploymentTarget": "production",
-  "version": "0.19.10-p108.20261105",
+  "version": "0.19.11-p109.20261105",
   "originalActions": 175,
   "allActions": 193,
   "scriptBlocks": 5,
-  "indexSha256": "56fab7a6fd1caff286125f2057c2cc7947a814d1b20bf3484c45ac1f13b30b46"
+  "indexSha256": "51ccc4ef53c033a91d9d7bac0a08bf64a7bd1d33ee799e05e17d6751b45a249e"
 }
