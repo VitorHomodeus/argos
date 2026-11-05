@@ -9094,9 +9094,14 @@ window.addEventListener("error",ev=>{if(/quota|storage|armazenamento/i.test(Stri
 try{document.documentElement.lang="pt-BR";}catch(e){}
 applyPrefs();liveClock();document.documentElement.setAttribute("data-argos-theme","dark");
 S.view="auth";S.authBusy=true;render();
-(async()=>{
+(async function argosBoot(){
  try{
-  const resp=await fetch("./argos-public-config.json",{cache:"no-store"});if(!resp.ok)throw Error("Configuração do servidor indisponível");
+  let resp;
+  try{resp=await fetch("./argos-public-config.json",{cache:"no-store"});}
+  catch(netErr){ /* P111: sem internet e sem cópia no aparelho: avisa e tenta de novo quando a conexão voltar */
+   S.authBusy=false;S.authReady=false;S.loginError="Sem internet agora. O ARGOS abre sozinho quando a conexão voltar.";render();
+   const again=()=>{window.removeEventListener("online",again);S.authBusy=true;render();argosBoot();};window.addEventListener("online",again);return;
+  }if(!resp.ok)throw Error("Configuração do servidor indisponível");
   const cfg=await resp.json();
   const guard=await import("./argos-deploy-guard.mjs");
   guard.assertArgosDeployment(location.hostname,cfg);
@@ -9115,7 +9120,7 @@ S.view="auth";S.authBusy=true;render();
    return;
   }
   await argosRestoreRemembered();
- }catch(e){AUTH=null;S.authReady=false;S.authBusy=false;S.loginError="Ambiente não configurado ou autenticação indisponível. Acesse o QA configurado.";render();}
+ }catch(e){AUTH=null;S.authReady=false;S.authBusy=false;S.loginError="Não foi possível abrir o ARGOS agora. Feche e abra de novo em alguns instantes; se continuar, avise o administrador.";render();}
 })();
 /* P110: abre com o login lembrado; sem internet, não apaga o login e entra sozinho quando a conexão voltar. */
 async function argosRestoreRemembered(){
